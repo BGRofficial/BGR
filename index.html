@@ -1,359 +1,239 @@
-Index · HTML
-복사
-
 <!DOCTYPE html>
+
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-<title>FRAME — Media Art Installation</title>
+<title>SERVER. BGR</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300;400;600&family=Syne+Mono&display=swap');
- 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
- 
-  :root {
-    --bg: #c2c2c2;
-    --gray-darkest: #2a2a2a;
-    --gray-dark: #3a3a3a;
-    --gray-mid-dark: #555555;
-    --gray-mid: #7a7a7a;
-    --gray-mid-light: #686868;
-    --gray-light: #555555;
-    --gray-lighter: #3a3a3a;
-    --gray-lightest: #2a2a2a;
-    --accent: #222222;
-  }
- 
-  html, body {
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
-    background: var(--bg);
-    font-family: 'Cormorant Garamond', serif;
-    color: var(--accent);
-    touch-action: none;
-    -webkit-tap-highlight-color: transparent;
-    -webkit-user-select: none;
-    user-select: none;
-  }
- 
-  #canvas-container {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    z-index: 1;
-  }
- 
-  canvas { display: block; width: 100% !important; height: 100% !important; }
- 
-  .overlay { position: fixed; z-index: 10; pointer-events: none; }
- 
-  .top-bar {
-    top: 0; left: 0; right: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 32px 36px;
-  }
- 
-  .title-block h1 {
-    font-family: 'Cormorant Garamond', serif;
-    font-weight: 300;
-    font-size: 13px;
-    letter-spacing: 8px;
-    text-transform: uppercase;
-    color: var(--gray-lighter);
-    opacity: 0;
-    animation: fadeSlideDown 1.2s ease-out 0.5s forwards;
-  }
- 
-  .title-block .subtitle {
-    font-family: 'Syne Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 3px;
-    color: var(--gray-mid-light);
-    margin-top: 6px;
-    opacity: 0;
-    animation: fadeSlideDown 1.2s ease-out 0.8s forwards;
-  }
- 
-  .meta-info {
-    text-align: right;
-    font-family: 'Syne Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 2px;
-    color: var(--gray-mid);
-    line-height: 1.8;
-    opacity: 0;
-    animation: fadeSlideDown 1.2s ease-out 1s forwards;
-  }
- 
-  .bottom-bar {
-    bottom: 0; left: 0; right: 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    padding: 32px 36px;
-  }
- 
-  .interaction-hint {
-    font-family: 'Syne Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 3px;
-    color: var(--gray-mid);
-    opacity: 0;
-    animation: fadeSlideUp 1.2s ease-out 1.5s forwards;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
- 
-  .hint-dot {
-    width: 4px; height: 4px;
-    border-radius: 50%;
-    background: var(--gray-mid-light);
-    animation: pulse 2.5s ease-in-out infinite;
-  }
- 
-  .coord-display {
-    font-family: 'Syne Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 2px;
-    color: var(--gray-mid);
-    text-align: right;
-    opacity: 0;
-    animation: fadeSlideUp 1.2s ease-out 1.8s forwards;
-  }
- 
-  /* Mode buttons */
-  .mode-controls {
-    position: fixed;
-    bottom: 80px;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 20;
-    display: flex;
-    gap: 2px;
-    opacity: 0;
-    animation: fadeSlideUp 1s ease-out 2s forwards;
-  }
- 
-  .mode-btn {
-    pointer-events: all;
-    background: rgba(160,160,160,0.35);
-    border: 1px solid var(--gray-mid);
-    color: var(--gray-lighter);
-    font-family: 'Syne Mono', monospace;
-    font-size: 9px;
-    letter-spacing: 2px;
-    padding: 10px 20px;
-    cursor: pointer;
-    transition: all 0.4s ease;
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-    text-transform: uppercase;
-  }
- 
-  .mode-btn:first-child { border-radius: 20px 0 0 20px; }
-  .mode-btn:last-child { border-radius: 0 20px 20px 0; }
- 
-  .mode-btn.active {
-    background: rgba(80,80,80,0.4);
-    border-color: var(--gray-light);
-    color: var(--gray-darkest);
-  }
- 
-  /* Center crosshair */
-  .crosshair {
-    position: fixed;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 5;
-    opacity: 0;
-    animation: fadeIn 1.5s ease-out 2.5s forwards;
-  }
- 
-  .crosshair::before, .crosshair::after {
-    content: '';
-    position: absolute;
-    background: var(--gray-mid);
-  }
-  .crosshair::before { width: 1px; height: 20px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
-  .crosshair::after { width: 20px; height: 1px; left: 50%; top: 50%; transform: translate(-50%, -50%); }
- 
-  /* Loading screen */
-  #loading {
-    position: fixed;
-    inset: 0;
-    z-index: 100;
-    background: var(--bg);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    transition: opacity 1s ease-out;
-  }
- 
-  #loading.fade-out {
-    opacity: 0;
-    pointer-events: none;
-  }
- 
-  #loading.gone {
-    display: none;
-  }
- 
-  #loading h2 {
-    font-family: 'Cormorant Garamond', serif;
-    font-weight: 300;
-    font-size: 15px;
-    letter-spacing: 12px;
-    text-transform: uppercase;
-    color: var(--gray-lighter);
-  }
- 
-  .load-bar {
-    width: 120px; height: 1px;
-    background: var(--gray-mid);
-    margin-top: 24px;
-    position: relative;
-    overflow: hidden;
-  }
- 
-  .load-bar::after {
-    content: '';
-    position: absolute;
-    left: 0; top: 0;
-    width: 100%; height: 100%;
-    background: var(--gray-lightest);
-    animation: loadProgress 2s ease-in-out forwards;
-  }
- 
-  /* Depth lines */
-  .depth-line { position: fixed; z-index: 3; background: var(--gray-mid-dark); }
-  .depth-line.left { left: 36px; top: 80px; bottom: 80px; width: 1px; opacity: 0; animation: fadeIn 2s ease-out 1.2s forwards; }
-  .depth-line.right { right: 36px; top: 80px; bottom: 80px; width: 1px; opacity: 0; animation: fadeIn 2s ease-out 1.4s forwards; }
- 
-  /* Error fallback */
-  #error-msg {
-    display: none;
-    position: fixed;
-    inset: 0;
-    z-index: 200;
-    background: var(--bg);
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Syne Mono', monospace;
-    font-size: 11px;
-    letter-spacing: 2px;
-    color: var(--gray-light);
-    text-align: center;
-    line-height: 2.4;
-  }
- 
-  /* Animations */
-  @keyframes fadeSlideDown { from { opacity:0; transform:translateY(-12px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes fadeSlideUp { from { opacity:0; transform:translateY(12px); } to { opacity:1; transform:translateY(0); } }
-  @keyframes fadeIn { from { opacity:0; } to { opacity:0.5; } }
-  @keyframes pulse { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
-  @keyframes loadProgress { 0% { transform:scaleX(0); transform-origin:left; } 100% { transform:scaleX(1); transform-origin:left; } }
+
+- { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+–bg: #c2c2c2;
+}
+
+html, body {
+width: 100%;
+height: 100%;
+overflow: hidden;
+background: var(–bg);
+font-family: ‘Cormorant Garamond’, serif;
+touch-action: none;
+-webkit-tap-highlight-color: transparent;
+-webkit-user-select: none;
+user-select: none;
+}
+
+#canvas-container {
+position: fixed;
+top: 0; left: 0;
+width: 100%; height: 100%;
+z-index: 1;
+}
+
+canvas { display: block; width: 100% !important; height: 100% !important; }
+
+/* Top title — SERVER. BGR */
+.top-title {
+position: fixed;
+top: 32px;
+left: 50%;
+transform: translateX(-50%);
+z-index: 10;
+pointer-events: none;
+font-family: ‘Syne Mono’, monospace;
+font-size: 11px;
+letter-spacing: 6px;
+text-transform: uppercase;
+color: #3a3a3a;
+opacity: 0;
+animation: fadeSlideDown 1.2s ease-out 0.5s forwards;
+}
+
+/* Mode buttons — bottom center */
+.mode-controls {
+position: fixed;
+bottom: 40px;
+left: 50%;
+transform: translateX(-50%);
+z-index: 20;
+display: flex;
+gap: 2px;
+opacity: 0;
+animation: fadeSlideUp 1s ease-out 2s forwards;
+}
+
+.mode-btn {
+pointer-events: all;
+background: rgba(160,160,160,0.35);
+border: 1px solid #888;
+color: #3a3a3a;
+font-family: ‘Syne Mono’, monospace;
+font-size: 9px;
+letter-spacing: 2px;
+padding: 10px 20px;
+cursor: pointer;
+transition: all 0.4s ease;
+backdrop-filter: blur(10px);
+-webkit-backdrop-filter: blur(10px);
+text-transform: uppercase;
+}
+
+.mode-btn:first-child { border-radius: 20px 0 0 20px; }
+.mode-btn:last-child { border-radius: 0 20px 20px 0; }
+
+.mode-btn.active {
+background: rgba(80,80,80,0.4);
+border-color: #666;
+color: #1a1a1a;
+}
+
+/* Loading screen */
+#loading {
+position: fixed;
+inset: 0;
+z-index: 100;
+background: var(–bg);
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+transition: opacity 1s ease-out;
+}
+
+#loading.fade-out {
+opacity: 0;
+pointer-events: none;
+}
+
+#loading.gone { display: none; }
+
+#loading h2 {
+font-family: ‘Syne Mono’, monospace;
+font-weight: 400;
+font-size: 11px;
+letter-spacing: 6px;
+text-transform: uppercase;
+color: #3a3a3a;
+}
+
+.load-bar {
+width: 120px; height: 1px;
+background: #aaa;
+margin-top: 24px;
+position: relative;
+overflow: hidden;
+}
+
+.load-bar::after {
+content: ‘’;
+position: absolute;
+left: 0; top: 0;
+width: 100%; height: 100%;
+background: #555;
+animation: loadProgress 2s ease-in-out forwards;
+}
+
+/* Error fallback */
+#error-msg {
+display: none;
+position: fixed;
+inset: 0;
+z-index: 200;
+background: var(–bg);
+flex-direction: column;
+align-items: center;
+justify-content: center;
+font-family: ‘Syne Mono’, monospace;
+font-size: 11px;
+letter-spacing: 2px;
+color: #555;
+text-align: center;
+line-height: 2.4;
+}
+
+/* Animations */
+@keyframes fadeSlideDown { from { opacity:0; transform:translateX(-50%) translateY(-12px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+@keyframes fadeSlideUp { from { opacity:0; transform:translateX(-50%) translateY(12px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+@keyframes loadProgress { 0% { transform:scaleX(0); transform-origin:left; } 100% { transform:scaleX(1); transform-origin:left; } }
 </style>
+
 </head>
 <body>
- 
+
 <!-- Loading -->
+
 <div id="loading">
-  <h2>Frame</h2>
+  <h2>Server. BGR</h2>
   <div class="load-bar"></div>
 </div>
- 
+
 <!-- Error fallback -->
+
 <div id="error-msg">
   WebGL is required to view this installation.<br>
   Please open in Safari or Chrome.
 </div>
- 
-<!-- Depth lines -->
-<div class="depth-line left"></div>
-<div class="depth-line right"></div>
-<div class="crosshair"></div>
- 
-<!-- Top UI -->
-<div class="overlay top-bar">
-  <div class="title-block">
-    <h1>Frame</h1>
-    <div class="subtitle">media art installation</div>
-  </div>
-  <div class="meta-info">No. 001<br>2026 — Seoul</div>
-</div>
- 
-<!-- Mode Controls -->
+
+<!-- Top title only -->
+
+<div class="top-title">Server. BGR</div>
+
+<!-- Mode Controls — bottom center -->
+
 <div class="mode-controls" id="modeControls">
   <button class="mode-btn active" data-mode="wire" onclick="setMode('wire')">Wire</button>
   <button class="mode-btn" data-mode="ghost" onclick="setMode('ghost')">Ghost</button>
   <button class="mode-btn" data-mode="xray" onclick="setMode('xray')">X-Ray</button>
 </div>
- 
-<!-- Bottom UI -->
-<div class="overlay bottom-bar">
-  <div class="interaction-hint">
-    <span class="hint-dot"></span>
-    Drag to rotate · Pinch to zoom
-  </div>
-  <div class="coord-display" id="coords">θ 0.00°   φ 0.00°</div>
-</div>
- 
+
 <!-- 3D Canvas -->
+
 <div id="canvas-container"></div>
- 
-<!--
-  CRITICAL FIX: Loading dismissal is in its own script block.
-  Even if Three.js CDN fails, this will always run.
--->
+
+<!-- Loading dismissal — independent of Three.js -->
+
 <script>
 (function() {
   var loadEl = document.getElementById('loading');
   setTimeout(function() {
     loadEl.classList.add('fade-out');
-    setTimeout(function() {
-      loadEl.classList.add('gone');
-    }, 1200);
+    setTimeout(function() { loadEl.classList.add('gone'); }, 1200);
   }, 2200);
 })();
 </script>
- 
+
 <!-- Three.js CDN -->
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
- 
-<!-- Main 3D Scene (separate block — won't block loading dismissal) -->
+
+<!-- Main 3D Scene -->
+
 <script>
 (function() {
-  // Guard: Three.js loaded?
   if (typeof THREE === 'undefined') {
     document.getElementById('error-msg').style.display = 'flex';
     return;
   }
- 
-  // Guard: WebGL available?
   var tc = document.createElement('canvas');
   var gl = tc.getContext('webgl') || tc.getContext('experimental-webgl');
   if (!gl) {
     document.getElementById('error-msg').style.display = 'flex';
     return;
   }
- 
+
   // ========== SCENE ==========
   var BG = 0xc2c2c2;
   var container = document.getElementById('canvas-container');
   var scene = new THREE.Scene();
   scene.fog = new THREE.FogExp2(BG, 0.028);
- 
+
   var camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 100);
   camera.position.set(4, 3, 5);
   camera.lookAt(0, 0.8, 0);
- 
+
   var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: 'high-performance' });
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -363,10 +243,10 @@ Index · HTML
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.1;
   container.appendChild(renderer.domElement);
- 
+
   // ========== LIGHTING ==========
   scene.add(new THREE.AmbientLight(0x999999, 0.6));
- 
+
   var keyLight = new THREE.DirectionalLight(0xffffff, 0.7);
   keyLight.position.set(5, 8, 4);
   keyLight.castShadow = true;
@@ -379,15 +259,15 @@ Index · HTML
   keyLight.shadow.camera.bottom = -5;
   keyLight.shadow.bias = -0.001;
   scene.add(keyLight);
- 
+
   var fillLight = new THREE.DirectionalLight(0xcccccc, 0.35);
   fillLight.position.set(-3, 4, -2);
   scene.add(fillLight);
- 
+
   var rimLight = new THREE.PointLight(0xaaaaaa, 0.3, 15);
   rimLight.position.set(-2, 3, -4);
   scene.add(rimLight);
- 
+
   // ========== GROUND ==========
   var ground = new THREE.Mesh(
     new THREE.PlaneGeometry(40, 40),
@@ -397,11 +277,11 @@ Index · HTML
   ground.position.y = -0.01;
   ground.receiveShadow = true;
   scene.add(ground);
- 
+
   var grid = new THREE.GridHelper(20, 40, 0xb5b5b5, 0xb0b0b0);
   grid.position.y = 0.005;
   scene.add(grid);
- 
+
   var plat = new THREE.Mesh(
     new THREE.CylinderGeometry(1.8, 2.0, 0.02, 64),
     new THREE.MeshStandardMaterial({ color: 0xb0b0b0, roughness: 0.85, metalness: 0.1 })
@@ -409,7 +289,7 @@ Index · HTML
   plat.position.y = 0.01;
   plat.receiveShadow = true;
   scene.add(plat);
- 
+
   var rng = new THREE.Mesh(
     new THREE.RingGeometry(1.79, 1.82, 64),
     new THREE.MeshBasicMaterial({ color: 0x999999, side: THREE.DoubleSide })
@@ -417,13 +297,13 @@ Index · HTML
   rng.rotation.x = -Math.PI / 2;
   rng.position.y = 0.025;
   scene.add(rng);
- 
+
   // ========== CHAIR FRAME ==========
   var chairGroup = new THREE.Group();
   var frameMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.35, metalness: 0.65 });
   var wireframeMat = new THREE.LineBasicMaterial({ color: 0x444444 });
   var tr = 0.025, ts = 8;
- 
+
   function tube(a, b, r) {
     r = r || tr;
     var d = new THREE.Vector3().subVectors(b, a);
@@ -434,7 +314,7 @@ Index · HTML
     m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.clone().normalize());
     return m;
   }
- 
+
   function joint(p, r) {
     r = r || tr * 1.3;
     var m = new THREE.Mesh(new THREE.SphereGeometry(r, 12, 12), frameMat);
@@ -442,9 +322,9 @@ Index · HTML
     m.castShadow = true;
     return m;
   }
- 
+
   var sH = 0.9, sW = 0.85, sD = 0.85, bH = 1.65, bT = 0.12;
- 
+
   var fl_l = new THREE.Vector3(-sW/2, 0, sD/2);
   var fl_r = new THREE.Vector3(sW/2, 0, sD/2);
   var bl_l = new THREE.Vector3(-sW/2+0.03, 0, -sD/2);
@@ -466,8 +346,7 @@ Index · HTML
   var st_fr = new THREE.Vector3(sW/2, stH, sD/2);
   var st_bl = new THREE.Vector3(-sW/2+0.03, stH, -sD/2);
   var st_br = new THREE.Vector3(sW/2-0.03, stH, -sD/2);
- 
-  // Build
+
   [tube(fl_l,s_fl), tube(fl_r,s_fr), tube(bl_l,b_tl), tube(bl_r,b_tr),
    tube(s_fl,s_fr), tube(s_fr,s_br), tube(s_br,s_bl), tube(s_bl,s_fl),
    tube(s_fl,s_br,tr*0.7), tube(s_fr,s_bl,tr*0.7),
@@ -476,7 +355,7 @@ Index · HTML
    tube(st_fl,st_fr,tr*0.7), tube(st_bl,st_br,tr*0.7),
    tube(st_fl,st_bl,tr*0.7), tube(st_fr,st_br,tr*0.7)
   ].forEach(function(m) { chairGroup.add(m); });
- 
+
   for (var i = 1; i <= 3; i++) {
     var t = i / 4;
     chairGroup.add(tube(
@@ -485,13 +364,13 @@ Index · HTML
       tr * 0.6
     ));
   }
- 
+
   [fl_l,fl_r,bl_l,bl_r,s_fl,s_fr,s_bl,s_br,b_tl,b_tr,b_ml,b_mr,st_fl,st_fr,st_bl,st_br].forEach(function(p) {
     chairGroup.add(joint(p));
   });
- 
+
   scene.add(chairGroup);
- 
+
   // ========== WIREFRAME OVERLAY ==========
   var wireGroup = new THREE.Group();
   chairGroup.children.forEach(function(c) {
@@ -505,9 +384,9 @@ Index · HTML
   });
   wireGroup.visible = false;
   scene.add(wireGroup);
- 
+
   // ========== PARTICLES ==========
-  var pc = 200;
+  var pc = 150;
   var pg = new THREE.BufferGeometry();
   var pp = new Float32Array(pc * 3);
   for (var i = 0; i < pc; i++) {
@@ -519,19 +398,19 @@ Index · HTML
   scene.add(new THREE.Points(pg, new THREE.PointsMaterial({
     color: 0x999999, size: 0.015, sizeAttenuation: true, transparent: true, opacity: 0.4
   })));
- 
+
   // ========== CONTROLS ==========
   var isDragging = false, prevX = 0, prevY = 0;
   var theta = Math.PI/4, phi = Math.PI/6, radius = 6.5;
   var autoRotate = true, lastInteraction = 0;
- 
+
   function updateCamera() {
     camera.position.x = radius * Math.sin(theta) * Math.cos(phi);
     camera.position.y = radius * Math.sin(phi) + 1.0;
     camera.position.z = radius * Math.cos(theta) * Math.cos(phi);
     camera.lookAt(0, 0.8, 0);
   }
- 
+
   var el = renderer.domElement;
   el.addEventListener('pointerdown', function(e) {
     isDragging = true; prevX = e.clientX; prevY = e.clientY;
@@ -543,12 +422,10 @@ Index · HTML
     phi += (e.clientY - prevY) * 0.006;
     phi = Math.max(-0.1, Math.min(Math.PI/2.5, phi));
     prevX = e.clientX; prevY = e.clientY;
-    document.getElementById('coords').textContent =
-      'θ ' + ((theta*180/Math.PI)%360).toFixed(2) + '°   φ ' + (phi*180/Math.PI).toFixed(2) + '°';
   });
   el.addEventListener('pointerup', function() { isDragging = false; lastInteraction = Date.now(); });
   el.addEventListener('pointercancel', function() { isDragging = false; lastInteraction = Date.now(); });
- 
+
   var ipd = 0, ir = radius;
   el.addEventListener('touchstart', function(e) {
     if (e.touches.length === 2) {
@@ -569,7 +446,7 @@ Index · HTML
     radius = Math.max(3.5, Math.min(12, radius + e.deltaY*0.005));
     autoRotate = false; lastInteraction = Date.now();
   }, { passive: false });
- 
+
   // ========== MODES ==========
   var ghostMat = new THREE.MeshStandardMaterial({
     color: 0x777777, roughness: 0.3, metalness: 0.6, transparent: true, opacity: 0.18
@@ -578,7 +455,7 @@ Index · HTML
     color: 0x6688aa, roughness: 0.2, metalness: 0.8, transparent: true, opacity: 0.25
   });
   var xrayWire = new THREE.LineBasicMaterial({ color: 0x556688 });
- 
+
   window.setMode = function(mode) {
     document.querySelectorAll('.mode-btn').forEach(function(b) {
       b.classList.toggle('active', b.dataset.mode === mode);
@@ -606,7 +483,7 @@ Index · HTML
         break;
     }
   };
- 
+
   // ========== ANIMATE ==========
   function animate() {
     requestAnimationFrame(animate);
@@ -619,17 +496,18 @@ Index · HTML
     updateCamera();
     renderer.render(scene, camera);
   }
- 
+
   window.addEventListener('resize', function() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(window.innerWidth, window.innerHeight);
   });
- 
+
   updateCamera();
   setMode('wire');
   animate();
 })();
 </script>
+
 </body>
 </html>
