@@ -1,0 +1,618 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>타일. BGR</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@300&family=Syne+Mono&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    :root { --bg: #1e1c1a; }
+    html, body {
+      width: 100%; height: 100%; overflow: hidden;
+      background: var(--bg);
+      touch-action: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-user-select: none; user-select: none;
+    }
+    canvas {
+      display: block;
+      width: 100% !important;
+      height: 100% !important;
+      position: fixed;
+      top: 0; left: 0;
+    }
+    #loading {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: flex; align-items: center; justify-content: center;
+      flex-direction: column; gap: 20px;
+      z-index: 100;
+      transition: opacity 0.8s ease;
+    }
+    #loading.fade {
+      opacity: 0;
+      pointer-events: none;
+    }
+    .load-label {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.25em;
+      color: rgba(255,255,255,0.35);
+    }
+    .load-bar-wrap {
+      width: 120px; height: 1px;
+      background: rgba(255,255,255,0.12);
+    }
+    .load-bar {
+      height: 100%;
+      background: rgba(255,255,255,0.5);
+      width: 0%;
+      animation: loadProgress 1.6s ease-in-out forwards;
+    }
+    @keyframes loadProgress {
+      0%   { width: 0%; }
+      60%  { width: 75%; }
+      100% { width: 100%; }
+    }
+    #title {
+      position: fixed;
+      top: 28px; left: 32px;
+      font-family: 'Cormorant Garamond', serif;
+      font-weight: 300;
+      font-size: clamp(14px, 2vw, 18px);
+      letter-spacing: 0.12em;
+      color: rgba(255,255,255,0.55);
+      z-index: 10;
+      animation: fadeSlideDown 1.2s ease-out 0.5s both;
+      pointer-events: none;
+    }
+    #hint {
+      position: fixed;
+      bottom: 28px; right: 32px;
+      font-family: 'Syne Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      color: rgba(255,255,255,0.28);
+      z-index: 10;
+      animation: fadeSlideUp 1s ease-out 2s both;
+      pointer-events: none;
+      transition: opacity 0.6s ease;
+    }
+    #hint.hidden { opacity: 0; }
+    #error {
+      position: fixed; inset: 0;
+      background: var(--bg);
+      display: none; align-items: center; justify-content: center;
+      z-index: 200;
+    }
+    #error p {
+      font-family: 'Syne Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.2em;
+      color: rgba(255,255,255,0.3);
+    }
+    @keyframes fadeSlideDown {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeSlideUp {
+      from { opacity: 0; transform: translateY(8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+  </style>
+</head>
+<body>
+  <div id="loading">
+    <div class="load-label">타일. BGR</div>
+    <div class="load-bar-wrap"><div class="load-bar"></div></div>
+  </div>
+  <div id="error"><p>WEBGL NOT SUPPORTED</p></div>
+  <div id="title">타일. BGR</div>
+  <div id="hint">TOUCH · COLOR</div>
+  <canvas id="c"></canvas>
+
+<script>
+'use strict';
+
+// ─── Default config (used immediately; overridden by JSON) ───────────────────
+let config = {
+  grid: { cols: 20, rows: 28, tileAspect: 1.3, groutThickness: 0.04, groutColor: [0.12, 0.11, 0.10] },
+  palettes: {
+    idle:  [[0.71,0.71,0.69],[0.67,0.66,0.64],[0.73,0.72,0.70],[0.65,0.64,0.62]],
+    burst: [[0.92,0.38,0.26],[0.98,0.72,0.20],[0.28,0.68,0.82],[0.56,0.82,0.44],[0.88,0.34,0.68],[0.24,0.44,0.90]],
+    calm:  [[0.82,0.60,0.44],[0.44,0.58,0.72],[0.68,0.74,0.52]]
+  },
+  animation: { rippleSpeed: 8.0, rippleDecay: 0.003, rippleMaxRadius: 1.2, colorFadeMs: 2800, idleWaveSpeed: 0.18, idleWaveAmplitude: 0.06, maxActiveRipples: 8 },
+  ambient:   { shimmerSpeed: 0.4, shimmerScale: 0.015, breatheSpeed: 0.12, breatheDepth: 0.04 }
+};
+
+// ─── WebGL setup ─────────────────────────────────────────────────────────────
+const canvas = document.getElementById('c');
+let gl, isGL2 = false, useByteTexture = false;
+
+function initGL() {
+  gl = canvas.getContext('webgl2', { antialias: false, alpha: false });
+  if (gl) { isGL2 = true; return true; }
+  gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+  if (!gl) return false;
+  if (!gl.getExtension('OES_texture_float')) {
+    useByteTexture = true;
+  }
+  return true;
+}
+
+if (!initGL()) {
+  document.getElementById('error').style.display = 'flex';
+  document.getElementById('loading').style.display = 'none';
+  throw new Error('WebGL not supported');
+}
+
+// ─── Shaders ─────────────────────────────────────────────────────────────────
+const VS = `
+attribute vec2 a_pos;
+attribute vec2 a_uv;
+varying vec2 v_uv;
+void main() {
+  v_uv = a_uv;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}`;
+
+const FS = `
+precision highp float;
+varying vec2 v_uv;
+
+uniform vec2  u_gridDims;
+uniform float u_groutThick;
+uniform vec3  u_groutColor;
+uniform sampler2D u_state;
+uniform float u_time;
+uniform float u_shimmerSpeed;
+uniform float u_shimmerScale;
+uniform float u_breatheSpeed;
+uniform float u_breatheDepth;
+uniform float u_colorFadeSec;
+uniform int   u_useByteTexture;
+
+// Idle palette (4 entries)
+uniform vec3 u_idle0;
+uniform vec3 u_idle1;
+uniform vec3 u_idle2;
+uniform vec3 u_idle3;
+
+// Burst palette (6 entries)
+uniform vec3 u_burst0;
+uniform vec3 u_burst1;
+uniform vec3 u_burst2;
+uniform vec3 u_burst3;
+uniform vec3 u_burst4;
+uniform vec3 u_burst5;
+
+// Calm palette (3 entries)
+uniform vec3 u_calm0;
+uniform vec3 u_calm1;
+uniform vec3 u_calm2;
+
+vec3 getIdleColor(float idx) {
+  int i = int(mod(idx, 4.0));
+  if (i == 0) return u_idle0;
+  if (i == 1) return u_idle1;
+  if (i == 2) return u_idle2;
+  return u_idle3;
+}
+
+vec3 getBurstColor(float idx) {
+  int i = int(mod(idx, 6.0));
+  if (i == 0) return u_burst0;
+  if (i == 1) return u_burst1;
+  if (i == 2) return u_burst2;
+  if (i == 3) return u_burst3;
+  if (i == 4) return u_burst4;
+  return u_burst5;
+}
+
+vec3 getCalmColor(float idx) {
+  int i = int(mod(idx, 3.0));
+  if (i == 0) return u_calm0;
+  if (i == 1) return u_calm1;
+  return u_calm2;
+}
+
+void main() {
+  vec2 scaled   = v_uv * u_gridDims;
+  vec2 tileIdx  = floor(scaled);
+  vec2 tileLoc  = fract(scaled);
+
+  // Grout lines
+  float hg = u_groutThick * 0.5;
+  bool isGrout = tileLoc.x < hg || tileLoc.x > 1.0 - hg ||
+                 tileLoc.y < hg || tileLoc.y > 1.0 - hg;
+  if (isGrout) {
+    gl_FragColor = vec4(u_groutColor, 1.0);
+    return;
+  }
+
+  // Sample tile state
+  vec2 stUV = (tileIdx + 0.5) / u_gridDims;
+  vec4 st = texture2D(u_state, stUV);
+  if (u_useByteTexture == 1) st /= 255.0;
+
+  float paletteIdx  = st.r * 255.0;   // 0-3 idle, 4-9 burst (offset 4), 10-12 calm (offset 10)
+  float ripple      = st.g;            // [0..1]
+  float triggerAge  = st.b * 1000.0;  // seconds (stored compressed)
+  float phaseOff    = st.a;           // [0..1] ambient phase
+
+  // Resolve base tile color (idle palette, 0..3 index by tileIdx)
+  float idleIdx = mod(tileIdx.x + tileIdx.y * 1.3, 4.0);
+  vec3 baseColor = getIdleColor(idleIdx);
+
+  // Resolve burst/calm overlay color (from state)
+  vec3 overlayColor;
+  float pi = floor(paletteIdx);
+  if (pi >= 10.0) {
+    overlayColor = getCalmColor(pi - 10.0);
+  } else if (pi >= 4.0) {
+    overlayColor = getBurstColor(pi - 4.0);
+  } else {
+    overlayColor = baseColor;
+  }
+
+  // Fade progress: ripple intensity is passed directly
+  vec3 tileColor = mix(baseColor, overlayColor, ripple);
+
+  // Ambient shimmer — per-tile phase
+  float shimmer = sin(u_time * u_shimmerSpeed + phaseOff * 6.2831) * u_shimmerScale;
+  tileColor += shimmer;
+
+  // Global breathing wave across grid
+  float breathe = sin(u_time * u_breatheSpeed + tileIdx.x * 0.28 + tileIdx.y * 0.19) * u_breatheDepth;
+  tileColor += breathe;
+
+  // Bevel illusion — center brighter, edges darker
+  vec2 centered = tileLoc - 0.5;
+  float edgeDarken = 1.0 - dot(centered, centered) * 0.5;
+  tileColor *= edgeDarken;
+
+  // Subtle specular highlight (top-left)
+  vec2 specDir = tileLoc - vec2(0.18, 0.16);
+  float spec = 1.0 - smoothstep(0.0, 0.13, length(specDir));
+  tileColor += spec * 0.07;
+
+  gl_FragColor = vec4(clamp(tileColor, 0.0, 1.0), 1.0);
+}`;
+
+function compileShader(type, src) {
+  const s = gl.createShader(type);
+  gl.shaderSource(s, src);
+  gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS))
+    throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+
+const prog = gl.createProgram();
+gl.attachShader(prog, compileShader(gl.VERTEX_SHADER, VS));
+gl.attachShader(prog, compileShader(gl.FRAGMENT_SHADER, FS));
+gl.linkProgram(prog);
+if (!gl.getProgramParameter(prog, gl.LINK_STATUS))
+  throw new Error(gl.getProgramInfoLog(prog));
+gl.useProgram(prog);
+
+// ─── Fullscreen quad ─────────────────────────────────────────────────────────
+const quadVerts = new Float32Array([-1,-1, 1,-1, -1,1, 1,1]);
+const quadUVs   = new Float32Array([ 0, 1,  1, 1,  0,0, 1,0]);
+
+const vbPos = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbPos);
+gl.bufferData(gl.ARRAY_BUFFER, quadVerts, gl.STATIC_DRAW);
+const aPos = gl.getAttribLocation(prog, 'a_pos');
+gl.enableVertexAttribArray(aPos);
+gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+const vbUV = gl.createBuffer();
+gl.bindBuffer(gl.ARRAY_BUFFER, vbUV);
+gl.bufferData(gl.ARRAY_BUFFER, quadUVs, gl.STATIC_DRAW);
+const aUV = gl.getAttribLocation(prog, 'a_uv');
+gl.enableVertexAttribArray(aUV);
+gl.vertexAttribPointer(aUV, 2, gl.FLOAT, false, 0, 0);
+
+// ─── Uniform locations ───────────────────────────────────────────────────────
+const U = {};
+['u_gridDims','u_groutThick','u_groutColor','u_state','u_time',
+ 'u_shimmerSpeed','u_shimmerScale','u_breatheSpeed','u_breatheDepth',
+ 'u_colorFadeSec','u_useByteTexture',
+ 'u_idle0','u_idle1','u_idle2','u_idle3',
+ 'u_burst0','u_burst1','u_burst2','u_burst3','u_burst4','u_burst5',
+ 'u_calm0','u_calm1','u_calm2'
+].forEach(n => U[n] = gl.getUniformLocation(prog, n));
+
+// ─── Tile state ───────────────────────────────────────────────────────────────
+let cols, rows;
+let tileState;    // Float32Array, 4 floats per tile: [paletteIdx/255, ripple, triggerAgeSec/1000, phase]
+let stateTex;
+const dirtyTiles = new Set();
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+
+function easeOutCubic(t) { return 1 - Math.pow(1 - t, 3); }
+
+function buildTileState() {
+  tileState = new Float32Array(cols * rows * 4);
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      const i = (row * cols + col) * 4;
+      // paletteIdx 0..3 for idle, stored as normalized byte (0..1)
+      tileState[i + 0] = 0.0;                          // paletteIdx (0 = idle, no offset)
+      tileState[i + 1] = 0.0;                          // ripple intensity
+      tileState[i + 2] = 0.0;                          // triggerAge
+      tileState[i + 3] = Math.random();                // phase offset
+    }
+  }
+}
+
+function createStateTexture() {
+  if (stateTex) gl.deleteTexture(stateTex);
+  stateTex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, stateTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  uploadStateTexture();
+}
+
+function uploadStateTexture() {
+  gl.bindTexture(gl.TEXTURE_2D, stateTex);
+  if (useByteTexture) {
+    // Quantize to 0..255
+    const bytes = new Uint8Array(tileState.length);
+    for (let i = 0; i < tileState.length; i++) bytes[i] = Math.round(tileState[i] * 255);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+  } else {
+    if (isGL2) {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, cols, rows, 0, gl.RGBA, gl.FLOAT, tileState);
+    } else {
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, cols, rows, 0, gl.RGBA, gl.FLOAT, tileState);
+    }
+  }
+}
+
+// ─── Grid sizing ─────────────────────────────────────────────────────────────
+function computeGrid() {
+  const w = window.innerWidth, h = window.innerHeight;
+  const targetPx = clamp(Math.min(w, h) / 14, 28, 52);
+  const newCols = Math.ceil(w / targetPx);
+  const newRows = Math.ceil(h / (targetPx * config.grid.tileAspect));
+  return { cols: newCols, rows: newRows };
+}
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = window.innerWidth, h = window.innerHeight;
+  canvas.width  = Math.floor(w * dpr);
+  canvas.height = Math.floor(h * dpr);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+
+  const g = computeGrid();
+  const changed = g.cols !== cols || g.rows !== rows;
+  cols = g.cols;
+  rows = g.rows;
+
+  if (changed || !tileState) {
+    buildTileState();
+    createStateTexture();
+    dirtyTiles.clear();
+  }
+
+  gl.uniform2f(U.u_gridDims, cols, rows);
+}
+
+window.addEventListener('resize', resize);
+
+// ─── Upload uniforms from config ──────────────────────────────────────────────
+function applyConfigUniforms() {
+  const { groutThickness, groutColor } = config.grid;
+  const { shimmerSpeed, shimmerScale, breatheSpeed, breatheDepth } = config.ambient;
+  const { colorFadeMs } = config.animation;
+
+  gl.uniform1f(U.u_groutThick, groutThickness);
+  gl.uniform3fv(U.u_groutColor, groutColor);
+  gl.uniform1f(U.u_shimmerSpeed, shimmerSpeed);
+  gl.uniform1f(U.u_shimmerScale, shimmerScale);
+  gl.uniform1f(U.u_breatheSpeed, breatheSpeed);
+  gl.uniform1f(U.u_breatheDepth, breatheDepth);
+  gl.uniform1f(U.u_colorFadeSec, colorFadeMs / 1000);
+  gl.uniform1i(U.u_useByteTexture, useByteTexture ? 1 : 0);
+
+  // Palettes
+  const ip = config.palettes.idle;
+  gl.uniform3fv(U.u_idle0, ip[0]); gl.uniform3fv(U.u_idle1, ip[1]);
+  gl.uniform3fv(U.u_idle2, ip[2]); gl.uniform3fv(U.u_idle3, ip[3]);
+
+  const bp = config.palettes.burst;
+  gl.uniform3fv(U.u_burst0, bp[0]); gl.uniform3fv(U.u_burst1, bp[1]);
+  gl.uniform3fv(U.u_burst2, bp[2]); gl.uniform3fv(U.u_burst3, bp[3]);
+  gl.uniform3fv(U.u_burst4, bp[4]); gl.uniform3fv(U.u_burst5, bp[5]);
+
+  const cp = config.palettes.calm;
+  gl.uniform3fv(U.u_calm0, cp[0]); gl.uniform3fv(U.u_calm1, cp[1]);
+  gl.uniform3fv(U.u_calm2, cp[2]);
+
+  gl.uniform1i(U.u_state, 0);
+}
+
+// ─── Ripple system ───────────────────────────────────────────────────────────
+const ripples = [];
+let lastBurstIdx = 0;
+let nowSec = 0;
+
+function spawnRipple(cx, cy, strength, palette) {
+  if (ripples.length >= config.animation.maxActiveRipples) ripples.shift();
+  const paletteIdx = palette === 'calm'
+    ? 10 + (Math.floor(Math.random() * config.palettes.calm.length))
+    : 4  + (lastBurstIdx++ % config.palettes.burst.length);
+  ripples.push({ cx, cy, startTime: nowSec, paletteIdx, strength });
+}
+
+function updateRipples() {
+  const speed  = config.animation.rippleSpeed;
+  const maxR   = config.animation.rippleMaxRadius;
+
+  for (let r = ripples.length - 1; r >= 0; r--) {
+    const rip = ripples[r];
+    const age = nowSec - rip.startTime;
+    const radius = age * speed;
+
+    if (radius > maxR + 1.5) { ripples.splice(r, 1); continue; }
+
+    const ringW   = 0.8;
+    const minRing = Math.max(0, radius - ringW);
+    const maxRing = radius + ringW;
+
+    const colMin = Math.max(0,      Math.floor(rip.cx - maxRing));
+    const colMax = Math.min(cols-1, Math.ceil( rip.cx + maxRing));
+    const rowMin = Math.max(0,      Math.floor(rip.cy - maxRing));
+    const rowMax = Math.min(rows-1, Math.ceil( rip.cy + maxRing));
+
+    // Overall envelope: fade out as ripple expands beyond maxR
+    const envelopeFade = clamp(1.0 - (radius / maxR), 0, 1);
+
+    for (let row = rowMin; row <= rowMax; row++) {
+      for (let col = colMin; col <= colMax; col++) {
+        const dist = Math.hypot(col - rip.cx, row - rip.cy);
+        if (dist < minRing || dist > maxRing) continue;
+
+        const ringDist = Math.abs(dist - radius) / ringW;
+        const intensity = (1.0 - ringDist * ringDist) * rip.strength * envelopeFade;
+
+        const idx = (row * cols + col) * 4;
+        if (intensity > tileState[idx + 1]) {
+          tileState[idx + 0] = rip.paletteIdx / 255.0;
+          tileState[idx + 1] = intensity;
+          tileState[idx + 2] = nowSec / 1000.0;
+          dirtyTiles.add(idx);
+        }
+      }
+    }
+  }
+}
+
+function updateFades() {
+  const fadeSec = config.animation.colorFadeMs / 1000;
+  for (const idx of dirtyTiles) {
+    const age = nowSec - tileState[idx + 2] * 1000;
+    const progress = clamp(age / fadeSec, 0, 1);
+
+    if (progress >= 1.0) {
+      tileState[idx + 0] = 0.0;
+      tileState[idx + 1] = 0.0;
+      dirtyTiles.delete(idx);
+    } else {
+      tileState[idx + 1] = 1.0 - easeOutCubic(progress);
+    }
+  }
+}
+
+// ─── Pointer events ───────────────────────────────────────────────────────────
+const activePointers = new Map();
+let hintHidden = false;
+
+function screenToTile(clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  return {
+    cx: ((clientX - rect.left) / rect.width)  * cols,
+    cy: ((clientY - rect.top)  / rect.height) * rows
+  };
+}
+
+canvas.addEventListener('pointerdown', (e) => {
+  e.preventDefault();
+  activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  const { cx, cy } = screenToTile(e.clientX, e.clientY);
+  spawnRipple(cx, cy, 1.0, 'burst');
+  if (!hintHidden) {
+    hintHidden = true;
+    document.getElementById('hint').classList.add('hidden');
+  }
+});
+
+canvas.addEventListener('pointermove', (e) => {
+  if (!activePointers.has(e.pointerId)) return;
+  e.preventDefault();
+  const prev = activePointers.get(e.pointerId);
+  const dx = e.clientX - prev.x, dy = e.clientY - prev.y;
+  if (dx*dx + dy*dy > 400) { // only trail if moved >20px
+    const { cx, cy } = screenToTile(e.clientX, e.clientY);
+    spawnRipple(cx, cy, 0.45, 'burst');
+    activePointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  }
+});
+
+canvas.addEventListener('pointerup',     (e) => activePointers.delete(e.pointerId));
+canvas.addEventListener('pointercancel', (e) => activePointers.delete(e.pointerId));
+
+// ─── Idle sparks ──────────────────────────────────────────────────────────────
+function idleSpark() {
+  if (ripples.length < config.animation.maxActiveRipples - 1) {
+    spawnRipple(
+      Math.random() * cols,
+      Math.random() * rows,
+      0.12 + Math.random() * 0.20,
+      'calm'
+    );
+  }
+  setTimeout(idleSpark, 3000 + Math.random() * 5000);
+}
+
+// ─── Render loop ──────────────────────────────────────────────────────────────
+let startTime = null;
+
+function frame(ts) {
+  if (!startTime) startTime = ts;
+  nowSec = (ts - startTime) / 1000;
+
+  updateRipples();
+  updateFades();
+
+  // Re-upload texture
+  uploadStateTexture();
+
+  // Draw
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, stateTex);
+  gl.uniform1f(U.u_time, nowSec);
+  gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+  requestAnimationFrame(frame);
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+resize();
+applyConfigUniforms();
+
+// Fetch JSON config (non-blocking)
+fetch('./타일.config.json')
+  .then(r => r.json())
+  .then(json => {
+    config = json;
+    applyConfigUniforms();
+    // Rebuild grid if cols/rows from config differ significantly
+    resize();
+  })
+  .catch(() => { /* use defaults silently */ });
+
+// Start animation loop
+requestAnimationFrame(frame);
+
+// Idle sparks start after a short delay
+setTimeout(idleSpark, 4000);
+
+// Hide loading screen
+setTimeout(() => {
+  const loading = document.getElementById('loading');
+  loading.classList.add('fade');
+  setTimeout(() => { loading.style.display = 'none'; }, 900);
+}, 1800);
+</script>
+</body>
+</html>
